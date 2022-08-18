@@ -24,7 +24,7 @@ class MatrixFactorization:
 
     def feedforward(self):
         # FEEDFORWARD SHOULD ALWAYS BE DOT PRODUCT PREDICTION
-        return torch.matmul(self.user_repr, torch.transpose(self.item_repr, 0, 1))
+        return self.pred_graph.get_prediction(self.user_repr, self.item_repr)
 
     def fit(self, user_features, item_features, torch_train, epochs=100, lr=1e-3):
         # torch_interaction is a torch tensor
@@ -43,6 +43,9 @@ class MatrixFactorization:
 
         for epoch in range(epochs):
             start = t.default_timer()
+
+            # clear out all gradients in optimizer from previous run
+            optimizer.zero_grad()
 
             # update embeddings in every epoch
             if isinstance(self.loss_graph, MSELoss):
@@ -86,3 +89,16 @@ class MatrixFactorization:
         # if user is not specified and k is not specified, return all item rankings for all users
         if user is None and k is None:
             return torch.topk(prediction, k=num_items, dim=1).indices.detach().numpy()
+
+
+    def recall_at_k(self, interaction, k=10):
+        """
+        Computes the recall at k: the proportion of known items in the top k predictions.
+
+        Follow LightFM's implementation of recall @ k
+
+        :param interaction: torch tensor: dense interaction table
+        :param k: python int: number of top ranked items to look at
+        :return: torch tensor: the recall @ k per user (row)
+        """
+        pass
