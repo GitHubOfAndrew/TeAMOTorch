@@ -102,3 +102,88 @@ class MatrixFactorization:
         :return: torch tensor: the recall @ k per user (row)
         """
         pass
+
+    def recall_at_k(self, interaction, k=10, preserve_rows=False):
+        """
+        Computes the recall at k: the proportion of known items in the top k predictions.
+
+        Follow LightFM's implementation of recall @ k
+
+        :param interaction: torch tensor: dense interaction table
+        :param k: python int: number of top ranked items to look at
+        :param preserve_rows: python boolean: flag indicating
+        :return: torch tensor: the recall @ k per user (row)
+        """
+        prediction = self.feedforward()
+
+        positive_interactions = torch.where(interaction > 0.0, interaction, torch.tensor(0.0))
+
+        # top k from predictions
+        top_k_items = torch.topk(prediction, k=k, dim=1).indices
+
+        # gather items for each user in interaction matrix that correspond to the top k items
+        res_top_k = torch.gather(interaction, 1, top_k_items)
+
+        hits = torch.count_nonzero(res_top_k, dim=1).type(torch.float32)
+
+        relevant = torch.count_nonzero(positive_interactions, dim=1).type(torch.float32)
+
+        if not preserve_rows:
+            mask_zero_interaction = relevant != 0.0
+            masked_hits = torch.masked_select(hits, mask_zero_interaction)
+            masked_rel = torch.masked_select(relevant, mask_zero_interaction)
+            return masked_hits / masked_rel
+        else:
+            recall = hits / relevant
+            nan_mask = torch.isnan(recall)
+
+            return torch.where(nan_mask == False, recall, torch.tensor(0.0))
+
+    def precision_at_k(self, interaction, k=10, preserve_rows=False):
+        """
+        Computes the precision at k: the proportion of positive predictions in the top k predictions.
+
+        Follow LightFM's implementation of precision @ k
+
+        :param interaction: torch tensor: dense interaction table
+        :param k: python int: number of top ranked items to look at
+        :param preserve_rows: python boolean: flag indicating
+        :return: torch tensor: the precision @ k per user (row)
+        """
+        prediction = self.feedforward()
+
+        positive_interactions = torch.where(interaction > 0.0, interaction, torch.tensor(0.0))
+
+        # top k from predictions
+        top_k_items = torch.topk(prediction, k=k, dim=1).indices
+
+        # gather items for each user in interaction matrix that correspond to the top k items
+        res_top_k = torch.gather(interaction, 1, top_k_items)
+
+        hits = torch.count_nonzero(res_top_k, dim=1).type(torch.float32)
+
+        relevant = torch.count_nonzero(positive_interactions, dim=1).type(torch.float32)
+
+        if not preserve_rows:
+            mask_zero_interaction = relevant != 0.0
+            masked_hits = torch.masked_select(hits, mask_zero_interaction)
+            return masked_hits / k
+        else:
+            return hits / k
+
+    def f1_at_k(self, interaction, k=10, beta=1.0):
+        """
+        Returns a beta-f1 score at k. This is just a harmonic mean of the precision at k and recall at k.
+
+        :param interaction: torch tensor: dense interaction table
+        :param k: python int: number of top ranked items to look at
+        :param beta: parameter indicating how much more to weigh precision than recall
+        :return: torch float: the mean f1 at k
+        """
+
+        precision, recall = self.precision_at_k(interaction, k=k), self.recall_at_k(interaction, k=k)
+
+        prec, rec = torch.mean(precision), torch.mean(recall)
+
+        return ((1 + beta ** 2) * prec * rec) / (beta ** 2 * (prec + rec))
+
