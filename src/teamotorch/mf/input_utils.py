@@ -131,3 +131,93 @@ def df_to_sparse_pipeline(df, test_size=0.2):
         print('Please check your input for errors.')
         return
 
+
+def convert_np_to_torch_sparse(np_arr):
+    """
+    :param np_arr: a numpy array
+    :return: a torch sparse coo matrix instance (i.e. a sparse tensor)
+
+    Purpose: This is a utility function to help convert between a numpy array and a sparse tensor
+    """
+
+    tensor_arr = torch.tensor(np_arr, dtype=torch.float32)
+    return tensor_arr.to_sparse()
+
+
+def convert_torch_to_torch_sparse(torch_arr):
+    """
+    :param torch_arr: a torch tensor
+    :return: sparse tensor
+    """
+    return convert_np_to_torch_sparse(torch_arr.numpy())
+
+
+def convert_list_to_torch_sparse(li_arr):
+    """
+    :param li_arr: a python list
+    :return: sparse tensor
+    """
+    return convert_np_to_torch_sparse(np.array(li_arr))
+
+
+def convert_df_to_torch_sparse(df_arr):
+    """
+    :param df_arr: pandas dataframe
+    :return: sparse tensor
+    """
+    return convert_np_to_torch_sparse(np.array(df_arr))
+
+
+def convert_sp_sparse_to_torch_sparse(sp_arr):
+    """
+    :param sp_arr: a scipy sparse matrix (csr_matrix)
+    :return: torch sparse coo tensor
+    """
+
+    nonzero_vals = torch.tensor(sp_arr.data, dtype=torch.float32)
+
+    return nonzero_vals.to_sparse()
+
+
+def convert_to_torch_sparse(arr):
+    """
+    :param arr: any instance of the following array-like objects: numpy array, list, pandas dataframe, tensorflow tensor, scipy csr_matrix
+    :return: tensorflow sparse tensor
+    """
+
+    if isinstance(arr, list):
+        return convert_list_to_torch_sparse(arr)
+
+    if isinstance(arr, np.ndarray):
+        return convert_np_to_torch_sparse(arr)
+
+    if isinstance(arr, pd.DataFrame):
+        return convert_df_to_torch_sparse(arr)
+
+    if isinstance(arr, torch.Tensor):
+        return convert_torch_to_torch_sparse(arr)
+
+    if isinstance(arr, sparse.csr_matrix):
+        return convert_sp_sparse_to_torch_sparse(arr)
+
+
+def convert_to_tensor_constant(A):
+    """
+    :param A: instance of an array-like object: numpy arrays, python lists, pandas dataframes/series, tf tensor
+    :return: tensorflow tensor
+    """
+
+    # NOTE TO OTHER DEVELOPERS: THIS IS MEANT TO BE FLEXIBLE, IF YOU FIND ANY OTHER ARRAY-LIKE DATATYPE,
+    # FEEL FREE TO PUT IT IN HERE
+
+    # if input is a tf.Tensor, then don't change it
+    if isinstance(A, torch.Tensor):
+        pass
+
+    # convert to constant tensor if the datatype is a list or numpy-like array
+    if isinstance(A, list) or isinstance(A, np.ndarray) or isinstance(A, pd.core.series.Series):
+        return torch.tensor(A, dtype=torch.float32)
+
+    # convert to tensor using convert_to_tensor api if the datatype is a pandas dataframe
+    if isinstance(A, pd.DataFrame):
+        return torch.tensor(A.to_numpy(), dtype=torch.float32)
