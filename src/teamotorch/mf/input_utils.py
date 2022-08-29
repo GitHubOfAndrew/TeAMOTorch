@@ -97,7 +97,7 @@ def test_sparse_transformation(sparse_interactions, li_indices):
     li_int = []
     for tup, val in li_indices:
         row, col = tup
-        if dense_interactions[row, col] == val:
+        if dense_interactions[int(row), int(col)] == val:
             li_int.append(False)
 
     if not any(li_int):
@@ -174,7 +174,7 @@ def convert_sp_sparse_to_torch_sparse(sp_arr):
     :return: torch sparse coo tensor
     """
 
-    nonzero_vals = torch.tensor(sp_arr.data, dtype=torch.float32)
+    nonzero_vals = torch.tensor(sp_arr.toarray(), dtype=torch.float32)
 
     return nonzero_vals.to_sparse()
 
