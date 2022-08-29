@@ -36,4 +36,31 @@ def generate_random_interaction(n_users, n_items, min_val=0.0, max_val=5.0, dens
 
     return torch.sparse_coo_tensor(i, v, size=shape)
 
+def random_sampler(n_items, n_users, n_samples, replace=False):
+
+    """
+    Generates the sampled column indices (items) per row (user). This should be a matrix of shape [n_users, n_samples]
+    :param n_items: python int: number of items in interactions
+    :param n_users: python int: number of users in interactions
+    :param n_samples: python int: number of item samples
+    :param replace: python boolean: whether to sample items by replacement or not
+    :return: tensorflow tensor: contains n_samples sampled items per user
+    """
+
+    items_per_user = [np.random.choice(a=n_items, size=n_samples, replace=replace) for _ in range(n_users)]
+
+    return torch.tensor(np.array(items_per_user), dtype=torch.int64)
+
+def get_sampled_predictions(n_users, predictions, sampled_indices):
+    lst = []
+    for i in range(n_users):
+        lst.append(predictions[i][sampled_indices[i]])
+    return torch.stack(lst)
+
+def get_predictions_serial(interactions, predictions):
+    nonzero_mask = torch.tensor(interactions.toarray() != 0)
+    return torch.masked_select(predictions, nonzero_mask)
+
+
+
 
