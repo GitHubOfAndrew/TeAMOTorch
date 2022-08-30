@@ -7,17 +7,31 @@ import timeit as t
 from .embedding_graphs import *
 from .predict_graphs import *
 from .loss_graphs import *
+from .utils import *
 
 
 class MatrixFactorization:
 
     def __init__(self, n_components, user_repr_graph=LinearEmbedding(), item_repr_graph=LinearEmbedding(),
-                 loss_graph=MSELoss(), pred_graph=DotProduct()):
+                 loss_graph=MSELoss(), pred_graph=DotProduct(), n_users=None, n_items=None, n_samples=None, is_sample_based=False):
         self.n_components = n_components
         self.user_repr_graph = user_repr_graph
         self.item_repr_graph = item_repr_graph
         self.loss_graph = loss_graph
         self.pred_graph = pred_graph
+
+        # check for attributes if sample-based loss is used
+        self.n_users = n_users
+        self.n_items = n_items
+        self.n_samples = n_samples
+
+        if self.n_samples is None and self.n_items is not None:
+            self.n_samples = n_items // 10
+
+        if isinstance(self.loss_graph, WMRBLoss):
+            # prepare all necessary parameters for sample-based WMRB
+            self.is_sample_based=True
+            self.sample_indices = random_sampler(self.n_items, self.n_users, self.n_samples)
 
         self.user_weight = None
         self.item_weight = None
@@ -48,12 +62,20 @@ class MatrixFactorization:
             optimizer.zero_grad()
 
             # update embeddings in every epoch
-            if isinstance(self.loss_graph, MSELoss):
-                user_repr, _ = self.user_repr_graph.get_repr(user_features, self.n_components, self.user_weight[0])
-                item_repr, _ = self.item_repr_graph.get_repr(item_features, self.n_components, self.item_weight[0])
+            user_repr, _ = self.user_repr_graph.get_repr(user_features, self.n_components, self.user_weight[0])
+            item_repr, _ = self.item_repr_graph.get_repr(item_features, self.n_components, self.item_weight[0])
 
             prediction = torch.matmul(user_repr, torch.transpose(item_repr, 0, 1))
-            loss = self.loss_graph.get_loss(prediction, torch_train)
+
+            if isinstance(self.loss_graph, MSELoss):
+                # get loss function for MSE Loss
+                loss = self.loss_graph.get_loss(prediction, torch_train)
+
+            if isinstance(self.loss_graph, WMRBLoss):
+                # get loss function for WMRB Loss
+                torch_prediction_serial = get_predictions_serial(torch_train, prediction)
+                torch_sample_predictions = get_sampled_predictions(prediction, self.sample_indices)
+                loss = self.loss_graph.get_loss(torch_train, torch_sample_predictions, torch_prediction_serial, self.n_items, self.n_samples)
 
             # compute gradient in place
             external_loss_grad = torch.ones(loss.shape)
@@ -65,7 +87,7 @@ class MatrixFactorization:
 
             cumulative_time += (end - start)
             if (epoch + 1) % 25 == 0:
-                print(f'Epoch {epoch + 1} | Loss {torch.sum(loss)} | Runtime {cumulative_time:.5f} s')
+                print(f'Epoch {epoch + 1} | Loss {torch.mean(loss)} | Runtime {cumulative_time:.5f} s')
 
             # store the final value of embeddings
             self.user_repr, self.item_repr = user_repr, item_repr

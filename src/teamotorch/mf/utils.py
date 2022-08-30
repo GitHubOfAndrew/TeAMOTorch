@@ -51,11 +51,15 @@ def random_sampler(n_items, n_users, n_samples, replace=False):
 
     return torch.tensor(np.array(items_per_user), dtype=torch.int64)
 
-def get_sampled_predictions(n_users, predictions, sampled_indices):
-    lst = []
-    for i in range(n_users):
-        lst.append(predictions[i][sampled_indices[i]])
-    return torch.stack(lst)
+def get_sampled_predictions(predictions, sampled_indices):
+    """
+    Get the sampled predictions according to the random sampling from the random_sampler() method
+
+    :param predictions:
+    :param sampled_indices:
+    :return:
+    """
+    return torch.gather(predictions, 1, sampled_indices)
 
 def get_predictions_serial(interactions, predictions):
     nonzero_mask = torch.tensor(interactions.toarray() != 0)
