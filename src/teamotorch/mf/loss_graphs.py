@@ -2,6 +2,7 @@
 # OBJECTS FOR THE LOSS FUNCTIONS TO BE USED IN TRAINING THE MATRIX FACTORIZATION MODEL
 
 import torch
+import torch.distributions as tdist
 from abc import *
 
 
@@ -55,9 +56,9 @@ class WMRBLoss(LossGraph):
 
         # this wmrb only takes into account positive interactions, ignores all negative interactions
 
-        positive_interaction_mask = torch.greater(torch_interactions.coalesce().values(), 0.0)
+        positive_interaction_mask = torch.greater(torch_interactions.values(), 0.0)
 
-        torch_interactions_indices = torch_interactions.coalesce().indices().transpose(1, 0)
+        torch_interactions_indices = torch_interactions.indices().transpose(1, 0)
 
         positive_interaction_indices = torch_interactions_indices[positive_interaction_mask]
 
@@ -71,5 +72,25 @@ class WMRBLoss(LossGraph):
         sampled_margin_rank = (n_items / n_samples) * torch.sum(summation_term, dim=1)
 
         return torch.log(1.0 + sampled_margin_rank)
+
+class KLDivergenceLoss(LossGraph):
+
+    def get_loss(self, interactions, torch_prediction_serial, torch_sample_predictions=None, n_items=None, n_samples=None, predictions=None):
+        
+        # Convert the scipy sparse matrix to torch sparse matrix
+
+        torch_interactions = torch.tensor(interactions.toarray()).to_sparse()
+
+        torch_pos_mask, torch_neg_mask = torch.greater(torch_interactions.values(), 0.0), torch.le(torch_interactions.values(), 0.0)
+        
+        torch_pos_pred, torch_neg_pred = torch_prediction_serial[torch_pos_mask], torch_prediction_serial[torch_neg_mask]
+
+        torch_pos_var, torch_pos_mean = torch.var_mean(torch_pos_pred, axis=0, unbiased=False)
+
+        torch_neg_var, torch_neg_mean = torch.var_mean(torch_neg_pred, axis=0, unbiased=False)
+
+        overlap_dist = tdist.Normal(torch_neg_mean - torch_pos_mean, torch.sqrt(torch_pos_var+torch_neg_var))
+
+        return 1.0 - overlap_dist.cdf(torch.tensor(0.0))
 
 
