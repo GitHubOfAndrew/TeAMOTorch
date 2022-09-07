@@ -93,4 +93,67 @@ class KLDivergenceLoss(LossGraph):
 
         return 1.0 - overlap_dist.cdf(torch.tensor(0.0))
 
+class WARPLoss(LossGraph):
+
+    def get_loss(self, predictions, interactions, n_users, n_items, max_num_trials = None):
+
+        # Convert the scipy sparse matrix to torch sparse matrix
+
+        torch_interactions = torch.tensor(interactions.toarray()).to_sparse()
+
+        if max_num_trials is None:
+            max_num_trials = torch_interactions.size()[1]-1
+
+        all_labels_idx = torch.arange(torch_interactions.size()[1])
+
+        positive_indices = torch.zeros(predictions.size()) # [n_users, n_items]
+        negative_indices = torch.zeros(predictions.size())
+        L = torch.zeros(predictions.size()[0])
+
+        for i in range(n_users):
+
+            msk = torch.ones(torch_interactions.size()[1], dtype=torch.bool)
+
+            # Find the positive label for this example
+            j = torch_interactions.indices()[1][torch_interactions.indices()[0]==i]
+
+            if j.nelement() == 0:
+              continue
+
+            msk[j] = False
+
+            neg_labels_idx = all_labels_idx[msk]
+
+            # initialize the sample_score_margin
+            sample_score_margin = -1
+            num_trials = 0
+
+            while ((sample_score_margin < 0) and (num_trials < max_num_trials)):
+                
+                if neg_labels_idx.nelement() == 0:
+                    break
+
+                # randomly sample a negative label
+                neg_idx = np.random.choice(a=neg_labels_idx, size=1)
+                msk[neg_idx] = False
+                neg_labels_idx = all_labels_idx[msk]
+
+                num_trials += 1
+                # calculate the score margin 
+                sampled_j = np.random.choice(a=j, size=1)
+                sample_score_margin = 1 + predictions[i, neg_idx] - predictions[i, sampled_j] 
+
+            if sample_score_margin < 0:
+                # checks if no violating examples have been found 
+                continue
+            else: 
+                loss_weight = np.log(math.floor((n_items-1)/(num_trials)))
+                L[i] = loss_weight
+                negative_indices[i, neg_idx] = 1
+                positive_indices[i, sampled_j] = 1
+
+        loss = L * (1-torch.sum(positive_indices*predictions, dim = 1) + torch.sum(negative_indices*predictions, dim = 1))
+
+        return torch.sum(loss , dim = 0, keepdim = True)
+
 
