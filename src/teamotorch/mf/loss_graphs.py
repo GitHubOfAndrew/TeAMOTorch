@@ -3,6 +3,8 @@
 
 import torch
 import torch.distributions as tdist
+import math
+import numpy as np
 from abc import *
 
 
@@ -74,6 +76,9 @@ class WMRBLoss(LossGraph):
         return torch.log(1.0 + sampled_margin_rank)
 
 class KLDivergenceLoss(LossGraph):
+    """
+    Class representing the Kullback-Leibler Divergence Loss. Models the positive and negative interactions as normal distributions and computes the complement of the CDF of the composite moments.
+    """
 
     def get_loss(self, interactions, torch_prediction_serial, torch_sample_predictions=None, n_items=None, n_samples=None, predictions=None):
         
@@ -94,8 +99,15 @@ class KLDivergenceLoss(LossGraph):
         return 1.0 - overlap_dist.cdf(torch.tensor(0.0))
 
 class WARPLoss(LossGraph):
+    """
+    Class representing the Weight Approximate Ranking Pairwise Loss (WARP). Compares predictions to one another according to ground truth interactions, will rank each prediction by sampling the items until we find the first violating example.
 
-    def get_loss(self, predictions, interactions, n_users, n_items, max_num_trials = None):
+    Result should be that the item ranks per user are computed to acceptable magnitude.
+
+    NOTE: The WMRB Loss is preferable to the WARP loss as it is far faster, albeit at the
+    """
+
+    def get_loss(self, output, interactions, n_users, n_items, max_num_trials = None):
 
         # Convert the scipy sparse matrix to torch sparse matrix
 
@@ -106,9 +118,9 @@ class WARPLoss(LossGraph):
 
         all_labels_idx = torch.arange(torch_interactions.size()[1])
 
-        positive_indices = torch.zeros(predictions.size()) # [n_users, n_items]
-        negative_indices = torch.zeros(predictions.size())
-        L = torch.zeros(predictions.size()[0])
+        positive_indices = torch.zeros(output.size()) # [n_users, n_items]
+        negative_indices = torch.zeros(output.size())
+        L = torch.zeros(output.size()[0])
 
         for i in range(n_users):
 
@@ -118,7 +130,7 @@ class WARPLoss(LossGraph):
             j = torch_interactions.indices()[1][torch_interactions.indices()[0]==i]
 
             if j.nelement() == 0:
-              continue
+                continue
 
             msk[j] = False
 
@@ -141,7 +153,7 @@ class WARPLoss(LossGraph):
                 num_trials += 1
                 # calculate the score margin 
                 sampled_j = np.random.choice(a=j, size=1)
-                sample_score_margin = 1 + predictions[i, neg_idx] - predictions[i, sampled_j] 
+                sample_score_margin = 1 + output[i, neg_idx] - output[i, sampled_j]
 
             if sample_score_margin < 0:
                 # checks if no violating examples have been found 
@@ -152,7 +164,7 @@ class WARPLoss(LossGraph):
                 negative_indices[i, neg_idx] = 1
                 positive_indices[i, sampled_j] = 1
 
-        loss = L * (1-torch.sum(positive_indices*predictions, dim = 1) + torch.sum(negative_indices*predictions, dim = 1))
+        loss = L * (1-torch.sum(positive_indices * output, dim = 1) + torch.sum(negative_indices * output, dim = 1))
 
         return torch.sum(loss , dim = 0, keepdim = True)
 
