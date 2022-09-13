@@ -107,14 +107,13 @@ class WARPLoss(LossGraph):
     NOTE: The WMRB Loss is preferable to the WARP loss as it is far faster, albeit at the
     """
 
-    def get_loss(self, output, interactions, n_users, n_items, max_num_trials = None):
+    def get_loss(self, output, interactions, n_users, n_items, torch_sample_predictions=None, torch_prediction_serial=None, n_samples=None):
 
         # Convert the scipy sparse matrix to torch sparse matrix
 
         torch_interactions = torch.tensor(interactions.toarray()).to_sparse()
 
-        if max_num_trials is None:
-            max_num_trials = torch_interactions.size()[1]-1
+        max_num_trials = torch_interactions.size()[1]-1
 
         all_labels_idx = torch.arange(torch_interactions.size()[1])
 

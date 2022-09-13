@@ -77,6 +77,15 @@ class MatrixFactorization:
                 torch_sample_predictions = get_sampled_predictions(prediction, self.sample_indices)
                 loss = self.loss_graph.get_loss(torch_train, torch_sample_predictions, torch_prediction_serial, self.n_items, self.n_samples)
 
+            if isinstance(self.loss_graph, KLDivergenceLoss):
+                # get loss function for KL Divergence Loss
+                torch_prediction_serial = get_predictions_serial(torch_train, prediction)
+                loss = self.loss_graph.get_loss(torch_train, torch_prediction_serial)
+
+            if isinstance(self.loss_graph, WARPLoss):
+                # get loss function for WARP Loss
+                loss = self.loss_graph.get_loss(prediction, torch_train, self.n_users, self.n_items)
+
             # compute gradient in place
             external_loss_grad = torch.ones(loss.shape)
             loss.backward(gradient=external_loss_grad)
